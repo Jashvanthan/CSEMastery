@@ -39,13 +39,54 @@ function formatReadableDate(d: Date): string {
 export async function getTracks(req: AuthRequest, res: Response) {
   try {
     const userId = req.user?.id || 1;
-    const tracks = await getAll(`SELECT * FROM tracks ORDER BY id ASC`);
+    // Order domains logically: Java, DSA, Full Stack, DBMS, AI, Capstone
+    const tracks = await getAll(`
+      SELECT * FROM tracks 
+      ORDER BY 
+        CASE id
+          WHEN 'java' THEN 1
+          WHEN 'dsa' THEN 2
+          WHEN 'fullstack' THEN 3
+          WHEN 'dbms' THEN 4
+          WHEN 'ai' THEN 5
+          WHEN 'capstone' THEN 6
+          ELSE 7
+        END ASC
+    `);
 
-    let previousTracksCompleted = true;
-    let activeDomainId = tracks.length > 0 ? tracks[0].id : 'dsa';
+    // Explicitly unlocked domains: DSA, Java, Full Stack, and DBMS
+    const unlockedDomainIds = ['java', 'dsa', 'fullstack', 'dbms'];
+
+    // Check completion progress across core domains
+    const javaProgress = await getOne(
+      `SELECT COUNT(DISTINCT dp.day_id) as completed, (SELECT COUNT(*) FROM study_days WHERE track_id = 'java') as total
+       FROM day_progress dp
+       JOIN study_days sd ON dp.day_id = sd.id
+       WHERE dp.user_id = $1 AND dp.status = 'COMPLETED' AND sd.track_id = 'java'`,
+      [userId]
+    );
+    const dsaProgress = await getOne(
+      `SELECT COUNT(DISTINCT dp.day_id) as completed, (SELECT COUNT(*) FROM study_days WHERE track_id = 'dsa') as total
+       FROM day_progress dp
+       JOIN study_days sd ON dp.day_id = sd.id
+       WHERE dp.user_id = $1 AND dp.status = 'COMPLETED' AND sd.track_id = 'dsa'`,
+      [userId]
+    );
+    const fullstackProgress = await getOne(
+      `SELECT COUNT(DISTINCT dp.day_id) as completed, (SELECT COUNT(*) FROM study_days WHERE track_id = 'fullstack') as total
+       FROM day_progress dp
+       JOIN study_days sd ON dp.day_id = sd.id
+       WHERE dp.user_id = $1 AND dp.status = 'COMPLETED' AND sd.track_id = 'fullstack'`,
+      [userId]
+    );
+
+    const isCoreCompleted = 
+      parseInt(javaProgress?.completed || '0', 10) >= parseInt(javaProgress?.total || '1', 10) &&
+      parseInt(dsaProgress?.completed || '0', 10) >= parseInt(dsaProgress?.total || '1', 10) &&
+      parseInt(fullstackProgress?.completed || '0', 10) >= parseInt(fullstackProgress?.total || '1', 10);
 
     const enrichedTracks = await Promise.all(
-      tracks.map(async (t, index) => {
+      tracks.map(async (t) => {
         const totalDaysRow = await getOne(`SELECT COUNT(*) as count FROM study_days WHERE track_id = $1`, [t.id]);
         const completedDaysRow = await getOne(
           `SELECT COUNT(DISTINCT dp.day_id) as count
@@ -73,18 +114,23 @@ export async function getTracks(req: AuthRequest, res: Response) {
         const completedWeeks = parseInt(completedWeeksRow?.count || '0', 10);
         const pendingWeeks = totalWeeks - completedWeeks;
 
-        // Domain Lock Rule: Track is unlocked if index === 0 OR previous tracks were 100% completed
-        const isLocked = index > 0 && !previousTracksCompleted;
-        const lockReason = isLocked
-          ? `Complete ${tracks[index - 1].name} (100%) to unlock this domain`
-          : undefined;
+        // Domain Lock Rule: DSA, Java, Full Stack, DBMS unlocked; AI & Capstone locked until prerequisites
+        let isLocked = false;
+        let lockReason: string | undefined = undefined;
 
-        if (pct < 100 && previousTracksCompleted && activeDomainId === tracks[0].id && index > 0) {
-          activeDomainId = t.id;
-        }
-
-        if (pct < 100) {
-          previousTracksCompleted = false;
+        if (t.id === 'ai') {
+          isLocked = !isCoreCompleted;
+          if (isLocked) {
+            lockReason = 'Complete Java, DSA, and Full Stack domains (100%) to unlock Artificial Intelligence & Applied ML';
+          }
+        } else if (t.id === 'capstone') {
+          isLocked = !isCoreCompleted;
+          if (isLocked) {
+            lockReason = 'Complete foundational domains (100%) to unlock System Design & Capstone Mastery';
+          }
+        } else if (!unlockedDomainIds.includes(t.id)) {
+          isLocked = true;
+          lockReason = 'Prerequisites required to unlock this domain';
         }
 
         return {
@@ -98,7 +144,7 @@ export async function getTracks(req: AuthRequest, res: Response) {
           pendingWeeks,
           is_locked: isLocked,
           lock_reason: lockReason,
-          is_active: t.id === activeDomainId,
+          is_active: t.id === 'dsa' || t.id === 'java',
         };
       })
     );
