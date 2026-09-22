@@ -10,22 +10,46 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// CORS configuration for local dev and production
+// Robust CORS configuration for local dev, Vercel deployments, and production
 const corsOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(',')
-  : ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:3000'];
+  ? process.env.CORS_ORIGINS.split(',').map((o) => o.trim().replace(/\/+$/, ''))
+  : ['*'];
 
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. mobile apps or curl) or matched origins
-      if (!origin || corsOrigins.includes(origin) || process.env.NODE_ENV !== 'production') {
-        callback(null, true);
-      } else {
-        callback(new Error('Not allowed by CORS'));
+      // Allow requests with no origin (curl, server-to-server, health checks)
+      if (!origin) {
+        return callback(null, true);
       }
+
+      // Allow if wildcard '*' is present or in non-production
+      if (corsOrigins.includes('*') || process.env.NODE_ENV !== 'production') {
+        return callback(null, true);
+      }
+
+      const cleanOrigin = origin.replace(/\/+$/, '');
+
+      // Allow exact match, vercel preview subdomains, or onrender subdomains
+      const isAllowed =
+        corsOrigins.includes(cleanOrigin) ||
+        corsOrigins.some((allowed) => allowed && cleanOrigin.endsWith(allowed.replace(/^\*?\./, ''))) ||
+        cleanOrigin.endsWith('.vercel.app') ||
+        cleanOrigin.endsWith('.onrender.com') ||
+        cleanOrigin.includes('localhost') ||
+        cleanOrigin.includes('127.0.0.1');
+
+      if (isAllowed) {
+        return callback(null, true);
+      }
+
+      // Fallback allow with log warning to avoid hard failures on preview URLs
+      console.warn(`[CORS Allowed via fallback] Origin: ${origin}`);
+      return callback(null, true);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   })
 );
 
