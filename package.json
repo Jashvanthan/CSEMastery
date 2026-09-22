@@ -1,0 +1,14 @@
+{
+  "name": "200-days-cse-mastery-hub",
+  "version": "1.0.0",
+  "description": "200 Days CSE Mastery Hub — Personal Learning Operating System",
+  "scripts": {
+    "seed": "npm --prefix backend run seed",
+    "dev:backend": "npm --prefix backend run dev",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "build": "npm --prefix backend run build && npm --prefix frontend run build"
+  },
+  "keywords": ["dsa", "java", "dbms", "fullstack", "ai", "200days"],
+  "author": "Antigravity",
+  "license": "MIT"
+}
