@@ -13,7 +13,18 @@ import {
   LeaderboardEntry,
 } from '../types';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || '/api';
+function getApiBase(): string {
+  const envUrl = (import.meta.env.VITE_API_BASE_URL || '').trim();
+  if (!envUrl) return '/api';
+  
+  const cleanUrl = envUrl.replace(/\/+$/, '');
+  if (!cleanUrl.endsWith('/api') && (cleanUrl.startsWith('http://') || cleanUrl.startsWith('https://'))) {
+    return `${cleanUrl}/api`;
+  }
+  return cleanUrl;
+}
+
+const API_BASE = getApiBase();
 
 function getAuthHeaders(): HeadersInit {
   const token = localStorage.getItem('mastery_token');
@@ -24,20 +35,28 @@ function getAuthHeaders(): HeadersInit {
 }
 
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers: {
-      ...getAuthHeaders(),
-      ...(options.headers || {}),
-    },
-  });
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  const targetUrl = `${API_BASE}${cleanEndpoint}`;
 
-  if (!res.ok) {
-    const errBody = await res.json().catch(() => ({}));
-    throw new Error(errBody.error || `Request failed with status ${res.status}`);
+  try {
+    const res = await fetch(targetUrl, {
+      ...options,
+      headers: {
+        ...getAuthHeaders(),
+        ...(options.headers || {}),
+      },
+    });
+
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.error || `Request failed with status ${res.status}`);
+    }
+
+    return res.json();
+  } catch (err: any) {
+    console.error(`[API Error] ${options.method || 'GET'} ${targetUrl}:`, err);
+    throw err;
   }
-
-  return res.json();
 }
 
 export const api = {

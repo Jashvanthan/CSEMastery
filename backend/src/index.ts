@@ -32,7 +32,7 @@ app.use(
 app.use(express.json());
 
 // Health check endpoint
-app.get('/api/health', (req, res) => {
+app.get(['/health', '/api/health'], (req, res) => {
   res.json({
     status: 'ok',
     app: '200 Days — CSE Mastery Hub API',
@@ -40,8 +40,9 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// Mount API routes
+// Mount API routes (support both /api/* and root /*)
 app.use('/api', apiRouter);
+app.use(apiRouter);
 
 // Global error handler
 app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
