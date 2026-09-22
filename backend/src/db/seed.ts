@@ -36,7 +36,7 @@ export async function runSeed(): Promise<void> {
          title = EXCLUDED.title,
          description = EXCLUDED.description,
          track_id = EXCLUDED.track_id`,
-      [w.id, w.week_number, w.title, w.desc, w.track_id]
+      [w.id, w.week_number, w.title, w.description, w.track_id]
     );
   }
 
