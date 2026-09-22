@@ -113,6 +113,25 @@ export async function getTaskDetail(req: AuthRequest, res: Response) {
       [userId, taskId, task.week_id]
     );
 
+    // Compute max unlocked week
+    const completedWeekRows = await getAll(
+      `SELECT w.week_number
+       FROM weeks w
+       JOIN study_days sd ON sd.week_id = w.id
+       LEFT JOIN day_progress dp ON sd.id = dp.day_id AND dp.user_id = $1 AND dp.status = 'COMPLETED'
+       GROUP BY w.id, w.week_number
+       HAVING COUNT(sd.id) = COUNT(dp.id)
+       ORDER BY w.week_number DESC`,
+      [userId]
+    );
+    const highestCompletedWeek = completedWeekRows.length > 0 ? completedWeekRows[0].week_number : 0;
+    const maxUnlockedWeek = Math.min(30, Math.max(11, highestCompletedWeek + 10));
+    const isTaskLocked = task.week_number > maxUnlockedWeek;
+    task.is_locked = isTaskLocked;
+    if (isTaskLocked) {
+      task.lock_reason = `Unlocks when you reach Week ${task.week_number - 10} (Week + 10 Learning Horizon)`;
+    }
+
     return res.json({
       task,
       navigation: {
@@ -141,6 +160,40 @@ export async function updateTaskStatus(req: AuthRequest, res: Response) {
     const taskId = parseInt(req.params.taskId as string, 10);
     const { status, revisionStatus, notes } = req.body; // 'COMPLETED' or 'PENDING'
 
+    // Verify task exists and check if week is locked
+    const taskInfo = await getOne(
+      `SELECT st.id, st.day_id, sd.week_id, w.week_number
+       FROM study_tasks st
+       JOIN study_days sd ON st.day_id = sd.id
+       JOIN weeks w ON sd.week_id = w.id
+       WHERE st.id = $1`,
+      [taskId]
+    );
+
+    if (!taskInfo) {
+      return res.status(404).json({ error: 'Task not found' });
+    }
+
+    const completedWeekRows = await getAll(
+      `SELECT w.week_number
+       FROM weeks w
+       JOIN study_days sd ON sd.week_id = w.id
+       LEFT JOIN day_progress dp ON sd.id = dp.day_id AND dp.user_id = $1 AND dp.status = 'COMPLETED'
+       GROUP BY w.id, w.week_number
+       HAVING COUNT(sd.id) = COUNT(dp.id)
+       ORDER BY w.week_number DESC`,
+      [userId]
+    );
+    const highestCompletedWeek = completedWeekRows.length > 0 ? completedWeekRows[0].week_number : 0;
+    const maxUnlockedWeek = Math.min(30, Math.max(11, highestCompletedWeek + 10));
+
+    if (taskInfo.week_number > maxUnlockedWeek) {
+      return res.status(403).json({
+        error: `Cannot complete tasks in a locked week. Unlocks when you reach Week ${taskInfo.week_number - 10}.`,
+        locked: true,
+      });
+    }
+
     const targetStatus = status || 'COMPLETED';
 
     await query(
@@ -166,7 +219,6 @@ export async function updateTaskStatus(req: AuthRequest, res: Response) {
     }
 
     // Check if all mandatory tasks of the parent day are now completed
-    const taskInfo = await getOne(`SELECT day_id FROM study_tasks WHERE id = $1`, [taskId]);
     if (taskInfo) {
       const dayTasks = await getAll(
         `SELECT st.id, COALESCE(sp.status, 'PENDING') as status

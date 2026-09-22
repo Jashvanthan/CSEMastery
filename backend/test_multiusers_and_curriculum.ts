@@ -136,31 +136,39 @@ async function runTestSuite() {
     }),
   }).then((r) => r.json());
 
-  // 2.4 User Beta completes Day 99 (DBMS) and Task 9901
-  await fetch(`${API_BASE}/days/99/status`, {
+  // 2.4 User Beta completes Day 2 (Java Day 2, in Week 1) and Task 201
+  await fetch(`${API_BASE}/days/2/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenBeta}` },
     body: JSON.stringify({ status: 'COMPLETED' }),
   });
 
-  await fetch(`${API_BASE}/tasks/9901/status`, {
+  await fetch(`${API_BASE}/tasks/201/status`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenBeta}` },
     body: JSON.stringify({ status: 'COMPLETED' }),
   });
 
-  // User Beta adds a private note to task 9901
+  // User Beta adds a private note to task 201
   const noteBeta = await fetch(`${API_BASE}/notes`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenBeta}` },
     body: JSON.stringify({
-      day_id: 99,
-      task_id: 9901,
-      content: 'BETA PRIVATE NOTE: Buffer pool clock-sweep eviction understood.',
+      day_id: 2,
+      task_id: 201,
+      content: 'BETA PRIVATE NOTE: Mastered Java Primitive Types and Casting.',
     }),
   }).then((r) => r.json());
 
-  // 2.5 Verify Dashboard Data Isolation
+  // 2.5 Verify Locked Week Rejection (Security check: Cannot complete Day 99 in locked Week 15)
+  const lockedAttemptRes = await fetch(`${API_BASE}/days/99/status`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokenBeta}` },
+    body: JSON.stringify({ status: 'COMPLETED' }),
+  });
+  assert(lockedAttemptRes.status === 403, `Security: Attempting to complete Day 99 in locked Week 15 returns 403 Forbidden`);
+
+  // 2.6 Verify Dashboard Data Isolation
   const dashAlpha = await fetch(`${API_BASE}/dashboard`, {
     headers: { Authorization: `Bearer ${tokenAlpha}` },
   }).then((r) => r.json());
@@ -172,9 +180,9 @@ async function runTestSuite() {
   assert(dashAlpha.completedDays === 1, `User Alpha has exactly 1 completed day (Received: ${dashAlpha.completedDays})`);
   assert(dashAlpha.completedTasks === 5, `User Alpha has exactly 5 completed tasks for Day 1 (Received: ${dashAlpha.completedTasks})`);
   assert(dashBeta.completedDays === 1, `User Beta has exactly 1 completed day (Received: ${dashBeta.completedDays})`);
-  assert(dashBeta.completedTasks === 5, `User Beta has exactly 5 completed tasks for Day 99 (Received: ${dashBeta.completedTasks})`);
+  assert(dashBeta.completedTasks === 5, `User Beta has exactly 5 completed tasks for Day 2 (Received: ${dashBeta.completedTasks})`);
 
-  // 2.6 Verify Day Status Isolation
+  // 2.7 Verify Day Status Isolation
   const day1ForAlpha = await fetch(`${API_BASE}/days/1`, {
     headers: { Authorization: `Bearer ${tokenAlpha}` },
   }).then((r) => r.json());
@@ -186,18 +194,18 @@ async function runTestSuite() {
   assert(day1ForAlpha.day.status === 'COMPLETED', `Day 1 is 'COMPLETED' for User Alpha`);
   assert(day1ForBeta.day.status === 'PENDING', `Day 1 is 'PENDING' for User Beta (isolated correctly!)`);
 
-  const day99ForAlpha = await fetch(`${API_BASE}/days/99`, {
+  const day2ForAlpha = await fetch(`${API_BASE}/days/2`, {
     headers: { Authorization: `Bearer ${tokenAlpha}` },
   }).then((r) => r.json());
 
-  const day99ForBeta = await fetch(`${API_BASE}/days/99`, {
+  const day2ForBeta = await fetch(`${API_BASE}/days/2`, {
     headers: { Authorization: `Bearer ${tokenBeta}` },
   }).then((r) => r.json());
 
-  assert(day99ForAlpha.day.status === 'PENDING', `Day 99 is 'PENDING' for User Alpha`);
-  assert(day99ForBeta.day.status === 'COMPLETED', `Day 99 is 'COMPLETED' for User Beta`);
+  assert(day2ForAlpha.day.status === 'PENDING', `Day 2 is 'PENDING' for User Alpha`);
+  assert(day2ForBeta.day.status === 'COMPLETED', `Day 2 is 'COMPLETED' for User Beta (isolated correctly!)`);
 
-  // 2.7 Verify Notes Isolation
+  // 2.8 Verify Notes Isolation
   const notesForAlpha = await fetch(`${API_BASE}/notes`, {
     headers: { Authorization: `Bearer ${tokenAlpha}` },
   }).then((r) => r.json());

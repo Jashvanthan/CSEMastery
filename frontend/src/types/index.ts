@@ -107,6 +107,9 @@ export interface StudyTask {
   user_notes?: string;
   scheduledDate?: string;
   formattedDate?: string;
+  week_number?: number;
+  is_locked?: boolean;
+  lock_reason?: string;
 }
 
 export interface LeetCodeProblem {

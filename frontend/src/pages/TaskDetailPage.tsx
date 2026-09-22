@@ -186,6 +186,16 @@ export const TaskDetailPage: React.FC = () => {
         <span className="text-slate-200 font-semibold truncate">Task {task.task_number}</span>
       </nav>
 
+      {/* Lock Warning Banner if task is locked */}
+      {task.is_locked && (
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-center gap-3 text-xs font-mono">
+          <span className="text-base">🔒</span>
+          <div>
+            <strong>Task Locked:</strong> {task.lock_reason || `This task belongs to a locked week. Unlocks when you reach Week ${task.week_number ? task.week_number - 10 : 1} (Week + 10 Learning Horizon).`}
+          </div>
+        </div>
+      )}
+
       {/* Header Banner & Status Controls */}
       <div className="p-6 rounded-2xl bg-[#121824] border border-[#232e42] relative shadow-lg">
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
@@ -197,6 +207,11 @@ export const TaskDetailPage: React.FC = () => {
               <span className="px-2.5 py-0.5 rounded-full bg-[#161c2b] border border-[#232e42] text-slate-300">
                 DAY {navigation.dayNumber}
               </span>
+              {task.is_locked && (
+                <span className="text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded font-semibold text-[10px]">
+                  🔒 LOCKED
+                </span>
+              )}
               {task.formattedDate && (
                 <span className="px-2.5 py-0.5 rounded-full bg-[#161c2b] border border-[#232e42] text-blue-300">
                   📅 {task.formattedDate}
@@ -219,8 +234,9 @@ export const TaskDetailPage: React.FC = () => {
             {/* Revision status selector */}
             <select
               value={task.revision_status}
+              disabled={task.is_locked}
               onChange={(e) => handleRevisionChange(e.target.value as any)}
-              className="px-3 py-2 rounded-xl bg-[#161c2b] border border-[#232e42] text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500"
+              className="px-3 py-2 rounded-xl bg-[#161c2b] border border-[#232e42] text-xs font-mono text-slate-200 focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <option value="NOT_REVIEWED">Not Reviewed</option>
               <option value="NEEDS_REVISION">⚠️ Needs Revision</option>
@@ -230,14 +246,17 @@ export const TaskDetailPage: React.FC = () => {
             {/* Mark Complete Button */}
             <button
               onClick={handleToggleTaskStatus}
+              disabled={task.is_locked}
               className={`px-5 py-2 rounded-xl font-semibold text-xs font-mono flex items-center gap-2 transition-all shadow-md ${
-                task.status === 'COMPLETED'
-                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
-                  : 'bg-blue-600 hover:bg-blue-500 text-white'
+                task.is_locked
+                  ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                  : task.status === 'COMPLETED'
+                  ? 'bg-emerald-600 hover:bg-emerald-500 text-white cursor-pointer'
+                  : 'bg-blue-600 hover:bg-blue-500 text-white cursor-pointer'
               }`}
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{task.status === 'COMPLETED' ? 'Completed ✓' : 'Mark Task Complete'}</span>
+              <span>{task.is_locked ? 'Task Locked 🔒' : task.status === 'COMPLETED' ? 'Completed ✓' : 'Mark Task Complete'}</span>
             </button>
           </div>
         </div>

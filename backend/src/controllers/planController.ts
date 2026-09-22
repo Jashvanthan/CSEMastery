@@ -494,6 +494,39 @@ export async function toggleDayStatus(req: AuthRequest, res: Response) {
     const dayId = parseInt(req.params.id as string, 10);
     const { status } = req.body; // 'COMPLETED' or 'PENDING'
 
+    // Check if day belongs to a locked week
+    const dayInfo = await getOne(
+      `SELECT sd.id, sd.week_id, w.week_number
+       FROM study_days sd
+       JOIN weeks w ON sd.week_id = w.id
+       WHERE sd.id = $1`,
+      [dayId]
+    );
+
+    if (!dayInfo) {
+      return res.status(404).json({ error: 'Day not found' });
+    }
+
+    const completedWeekRows = await getAll(
+      `SELECT w.week_number
+       FROM weeks w
+       JOIN study_days sd ON sd.week_id = w.id
+       LEFT JOIN day_progress dp ON sd.id = dp.day_id AND dp.user_id = $1 AND dp.status = 'COMPLETED'
+       GROUP BY w.id, w.week_number
+       HAVING COUNT(sd.id) = COUNT(dp.id)
+       ORDER BY w.week_number DESC`,
+      [userId]
+    );
+    const highestCompletedWeek = completedWeekRows.length > 0 ? completedWeekRows[0].week_number : 0;
+    const maxUnlockedWeek = Math.min(30, Math.max(11, highestCompletedWeek + 10));
+
+    if (dayInfo.week_number > maxUnlockedWeek) {
+      return res.status(403).json({
+        error: `Cannot complete a locked day. Unlocks when you reach Week ${dayInfo.week_number - 10}.`,
+        locked: true,
+      });
+    }
+
     const targetStatus = status || 'COMPLETED';
 
     await query(
@@ -537,6 +570,31 @@ export async function toggleWeekStatus(req: AuthRequest, res: Response) {
     const userId = req.user?.id || 1;
     const weekId = parseInt(req.params.weekId as string, 10);
     const { status } = req.body;
+
+    const weekInfo = await getOne(`SELECT * FROM weeks WHERE id = $1`, [weekId]);
+    if (!weekInfo) {
+      return res.status(404).json({ error: 'Week not found' });
+    }
+
+    const completedWeekRows = await getAll(
+      `SELECT w.week_number
+       FROM weeks w
+       JOIN study_days sd ON sd.week_id = w.id
+       LEFT JOIN day_progress dp ON sd.id = dp.day_id AND dp.user_id = $1 AND dp.status = 'COMPLETED'
+       GROUP BY w.id, w.week_number
+       HAVING COUNT(sd.id) = COUNT(dp.id)
+       ORDER BY w.week_number DESC`,
+      [userId]
+    );
+    const highestCompletedWeek = completedWeekRows.length > 0 ? completedWeekRows[0].week_number : 0;
+    const maxUnlockedWeek = Math.min(30, Math.max(11, highestCompletedWeek + 10));
+
+    if (weekInfo.week_number > maxUnlockedWeek) {
+      return res.status(403).json({
+        error: `Cannot complete a locked week. Unlocks when you reach Week ${weekInfo.week_number - 10}.`,
+        locked: true,
+      });
+    }
 
     const targetStatus = status || 'COMPLETED';
 
