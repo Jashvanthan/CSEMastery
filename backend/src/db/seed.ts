@@ -150,44 +150,17 @@ export async function runSeed(): Promise<void> {
     }
   }
 
-  // 6. Seed Multi-User Demo Scholars
-  console.log('[SEED] Seeding multi-user demo scholars with realistic historical progress...');
+  // 6. Seed Single Default Demo Scholar
+  console.log('[SEED] Seeding single default demo scholar (Mastery Scholar)...');
   const demoUsersConfig = [
     {
       id: 1,
       email: 'student@csemastery.hub',
       name: 'Mastery Scholar',
-      daysOffset: 10,
-      completedDaysCount: 5,
-      leetcodeCount: 5,
-      notes: 'Mastering Java Foundations and JVM memory layout. On track for 200 days!'
-    },
-    {
-      id: 2,
-      email: 'sarah.chen@stanford.edu',
-      name: 'Sarah Chen',
-      daysOffset: 24,
-      completedDaysCount: 18,
-      leetcodeCount: 16,
-      notes: 'Deep diving into Java Generics, Reflection, and Collections Internals.'
-    },
-    {
-      id: 3,
-      email: 'alex.rivera@berkeley.edu',
-      name: 'Alex Rivera',
-      daysOffset: 54,
-      completedDaysCount: 42,
-      leetcodeCount: 38,
-      notes: 'Finished Java Concurrency and now solving Trees and Graph algorithms.'
-    },
-    {
-      id: 4,
-      email: 'priya.sharma@iitd.ac.in',
-      name: 'Priya Sharma',
-      daysOffset: 109,
-      completedDaysCount: 85,
-      leetcodeCount: 64,
-      notes: 'Mastered Relational Algebra and Normalization. Building PostgreSQL schemas.'
+      daysOffset: 0,
+      completedDaysCount: 0,
+      leetcodeCount: 0,
+      notes: ''
     },
   ];
 
