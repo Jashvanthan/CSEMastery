@@ -19,6 +19,9 @@ export interface Track {
   totalWeeks?: number;
   completedWeeks?: number;
   pendingWeeks?: number;
+  is_locked?: boolean;
+  lock_reason?: string;
+  is_active?: boolean;
 }
 
 export interface Week {
@@ -39,6 +42,9 @@ export interface Week {
   endDate?: string;
   formattedDateRange?: string;
   status: 'PENDING' | 'IN_PROGRESS' | 'COMPLETED';
+  is_locked?: boolean;
+  lock_reason?: string;
+  max_unlocked_week?: number;
 }
 
 export interface StudyDay {
@@ -64,8 +70,9 @@ export interface StudyDay {
   tasks?: StudyTask[];
   scheduledDate?: string;
   formattedDate?: string;
+  is_locked?: boolean;
+  lock_reason?: string;
   reflection?: {
-
     whatLearned?: string;
     difficult?: string;
     toRevise?: string;
@@ -119,6 +126,8 @@ export interface LeetCodeProblem {
   status: 'PENDING' | 'COMPLETED';
   user_notes?: string;
   completed_at?: string;
+  is_locked?: boolean;
+  lock_reason?: string;
 }
 
 export interface LeetCodeStats {
@@ -169,6 +178,8 @@ export interface DashboardStats {
   completedWeeksCount: number;
   pendingWeeksCount: number;
   today: StudyDay;
+  maxUnlockedWeek?: number;
+  highestCompletedWeek?: number;
 
   trackProgress: {
     id: string;
@@ -184,6 +195,7 @@ export interface DashboardStats {
   streak: {
     current: number;
     longest: number;
+    highest?: number;
   };
   leetcode: {
     total: number;

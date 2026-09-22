@@ -85,6 +85,15 @@ export const WeekDetailPage: React.FC = () => {
         <span className="text-slate-200 font-semibold">Week {week.week_number}</span>
       </nav>
 
+      {week.is_locked && (
+        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 flex items-center gap-3 text-xs font-mono">
+          <span className="text-base">🔒</span>
+          <div>
+            <strong>Week Locked:</strong> {week.lock_reason || `Unlocks when you reach Week ${week.week_number - 10} (Week + 10 Learning Horizon).`}
+          </div>
+        </div>
+      )}
+
       <div className="p-6 rounded-2xl bg-[#121824] border border-[#232e42] relative shadow-lg">
         <div className="flex flex-col md:flex-row md:items-start justify-between gap-4">
           <div>
@@ -93,6 +102,11 @@ export const WeekDetailPage: React.FC = () => {
                 WEEK {week.week_number}
               </span>
               <span className="text-slate-400 uppercase">{week.track_name || week.track_id}</span>
+              {week.is_locked && (
+                <span className="text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded font-semibold text-[10px]">
+                  🔒 LOCKED
+                </span>
+              )}
             </div>
             <h1 className="text-2xl lg:text-3xl font-bold text-slate-100">{week.title}</h1>
             <p className="text-sm text-slate-400 mt-2 max-w-2xl">{week.description}</p>
@@ -107,14 +121,17 @@ export const WeekDetailPage: React.FC = () => {
           <div className="flex items-center gap-3">
             <button
               onClick={handleToggleWeek}
+              disabled={week.is_locked}
               className={`px-5 py-2.5 rounded-xl font-semibold text-xs font-mono flex items-center gap-2 transition-all shadow-md ${
-                week.status === 'COMPLETED'
+                week.is_locked
+                  ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
+                  : week.status === 'COMPLETED'
                   ? 'bg-emerald-600 hover:bg-emerald-500 text-white'
                   : 'bg-blue-600 hover:bg-blue-500 text-white'
               }`}
             >
               <CheckCircle2 className="w-4 h-4" />
-              <span>{week.status === 'COMPLETED' ? 'Week Completed ✓' : 'Mark Week Complete'}</span>
+              <span>{week.is_locked ? 'Locked' : week.status === 'COMPLETED' ? 'Week Completed ✓' : 'Mark Week Complete'}</span>
             </button>
           </div>
         </div>

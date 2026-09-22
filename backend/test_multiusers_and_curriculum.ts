@@ -242,6 +242,59 @@ async function runTestSuite() {
   assert(betaInLeaderboard && betaInLeaderboard.isCurrentUser === false, `isCurrentUser is FALSE for other users (Beta)`);
   assert(alphaInLeaderboard.completedDays === 1, `Alpha completedDays in leaderboard matches database (1 day)`);
 
+  console.log('\n--- TEST 4: PROGRESSIVE GATING (WEEK+10, DOMAIN LOCKING, STREAKS) ---');
+
+  // =========================================================================
+  // TEST SECTION 4: PROGRESSIVE GATING (WEEK+10, DOMAIN LOCKING, STREAKS)
+  // =========================================================================
+
+  // 4.1 Verify Domain Locking on Tracks endpoint
+  const tracksForAlpha = await fetch(`${API_BASE}/tracks`, {
+    headers: { Authorization: `Bearer ${tokenAlpha}` },
+  }).then((r) => r.json());
+
+  assert(tracksForAlpha.length === 6, `API /tracks returns 6 curriculum domains`);
+  assert(tracksForAlpha[0].is_locked === false, `First track (${tracksForAlpha[0].name}) is unlocked by default`);
+  assert(tracksForAlpha[1].is_locked === true, `Second track (${tracksForAlpha[1].name}) is locked until first track completes`);
+  assert(tracksForAlpha[1].lock_reason && tracksForAlpha[1].lock_reason.includes('Complete'), `Locked track provides clear unlock requirement message`);
+
+  // 4.2 Verify Week + 10 Learning Horizon
+  const weeksForAlpha = await fetch(`${API_BASE}/weeks`, {
+    headers: { Authorization: `Bearer ${tokenAlpha}` },
+  }).then((r) => r.json());
+
+  const week1 = weeksForAlpha.find((w: any) => w.week_number === 1);
+  const week11 = weeksForAlpha.find((w: any) => w.week_number === 11);
+  const week15 = weeksForAlpha.find((w: any) => w.week_number === 15);
+
+  assert(week1 && week1.is_locked === false, `Week 1 is unlocked`);
+  assert(week11 && week11.is_locked === false, `Week 11 (Week 1 + 10 horizon) is unlocked for starter`);
+  assert(week15 && week15.is_locked === true, `Week 15 (beyond Week + 10 horizon) is locked`);
+  assert(week15 && week15.lock_reason.includes('Week 5'), `Week 15 states it unlocks when user reaches Week 5`);
+
+  // 4.3 Verify LeetCode Locking by Week Horizon
+  const leetcodeForAlpha = await fetch(`${API_BASE}/leetcode`, {
+    headers: { Authorization: `Bearer ${tokenAlpha}` },
+  }).then((r) => r.json());
+
+  const leetcodeWeek1 = leetcodeForAlpha.find((p: any) => p.week_id === 1);
+  const leetcodeWeek20 = leetcodeForAlpha.find((p: any) => p.week_id >= 20);
+
+  assert(leetcodeWeek1 && leetcodeWeek1.is_locked === false, `LeetCode problem in Week 1 is unlocked`);
+  if (leetcodeWeek20) {
+    assert(leetcodeWeek20.is_locked === true, `LeetCode problem in Week >= 20 is locked`);
+    assert(leetcodeWeek20.lock_reason && leetcodeWeek20.lock_reason.includes('Week'), `Locked LeetCode problem provides week unlock horizon message`);
+  }
+
+  // 4.4 Verify Dashboard Streak Tracking
+  const dashStatsForAlpha = await fetch(`${API_BASE}/dashboard`, {
+    headers: { Authorization: `Bearer ${tokenAlpha}` },
+  }).then((r) => r.json());
+
+  assert(dashStatsForAlpha.streak !== undefined, `Dashboard returns streak metrics`);
+  assert(dashStatsForAlpha.streak.current >= 1, `Alpha current streak is updated upon completing Day 1 task`);
+  assert(dashStatsForAlpha.maxUnlockedWeek >= 11, `Dashboard reports maxUnlockedWeek >= 11`);
+
   console.log('\n===============================================================');
   console.log(`📊 TEST SUITE SUMMARY: ${passed} PASSED | ${failed} FAILED`);
   console.log('===============================================================\n');

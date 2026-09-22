@@ -292,11 +292,13 @@ export async function getDashboardStats(req: AuthRequest, res: Response) {
       })
     );
 
-    // 9. Streak calculation from actual completions
+    // 9. Unified Streak calculation from both study_progress and day_progress
     const completedDates = await getAll(
-      `SELECT DISTINCT date(completed_at) as cdate
-       FROM day_progress
-       WHERE user_id = $1 AND status = 'COMPLETED' AND completed_at IS NOT NULL
+      `SELECT DISTINCT cdate FROM (
+         SELECT date(completed_at) as cdate FROM day_progress WHERE user_id = $1 AND status = 'COMPLETED' AND completed_at IS NOT NULL
+         UNION
+         SELECT date(completed_at) as cdate FROM study_progress WHERE user_id = $1 AND status = 'COMPLETED' AND completed_at IS NOT NULL
+       ) sub
        ORDER BY cdate DESC`,
       [userId]
     );
@@ -307,7 +309,6 @@ export async function getDashboardStats(req: AuthRequest, res: Response) {
 
     if (completedDates.length > 0) {
       const dates = completedDates.map((d) => new Date(d.cdate));
-      // Calculate current streak
       const now = new Date();
       now.setHours(0, 0, 0, 0);
 
@@ -330,7 +331,6 @@ export async function getDashboardStats(req: AuthRequest, res: Response) {
         }
       }
 
-      // Calculate longest streak
       tempStreak = 1;
       longestStreak = 1;
       for (let i = 0; i < dates.length - 1; i++) {
@@ -345,6 +345,21 @@ export async function getDashboardStats(req: AuthRequest, res: Response) {
         }
       }
     }
+
+    // 9.1 Compute Highest Completed Week & Max Unlocked Week (Week + 10 Rule)
+    const completedWeekNumbers = await getAll(
+      `SELECT w.week_number
+       FROM weeks w
+       JOIN study_days sd ON sd.week_id = w.id
+       LEFT JOIN day_progress dp ON sd.id = dp.day_id AND dp.user_id = $1 AND dp.status = 'COMPLETED'
+       GROUP BY w.id, w.week_number
+       HAVING COUNT(sd.id) = COUNT(dp.id)
+       ORDER BY w.week_number DESC`,
+      [userId]
+    );
+
+    const highestCompletedWeek = completedWeekNumbers.length > 0 ? completedWeekNumbers[0].week_number : 0;
+    const maxUnlockedWeek = Math.min(30, Math.max(11, highestCompletedWeek + 10));
 
     // 10. LeetCode progress summary
     const totalLeetCodeRow = await getOne(`SELECT COUNT(*) as count FROM leetcode_problems`);
@@ -423,7 +438,10 @@ export async function getDashboardStats(req: AuthRequest, res: Response) {
       streak: {
         current: currentStreak,
         longest: longestStreak,
+        highest: longestStreak,
       },
+      maxUnlockedWeek,
+      highestCompletedWeek,
       leetcode: {
         total: totalLeetcode,
         completed: completedLeetcode,

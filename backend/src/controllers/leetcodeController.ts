@@ -42,7 +42,30 @@ export async function getLeetcodeList(req: AuthRequest, res: Response) {
 
     const problems = await getAll(sql, params);
 
-    return res.json(problems);
+    // Compute max unlocked week
+    const completedWeekRows = await getAll(
+      `SELECT w.week_number
+       FROM weeks w
+       JOIN study_days sd ON sd.week_id = w.id
+       LEFT JOIN day_progress dp ON sd.id = dp.day_id AND dp.user_id = $1 AND dp.status = 'COMPLETED'
+       GROUP BY w.id, w.week_number
+       HAVING COUNT(sd.id) = COUNT(dp.id)
+       ORDER BY w.week_number DESC`,
+      [userId]
+    );
+    const highestCompletedWeek = completedWeekRows.length > 0 ? completedWeekRows[0].week_number : 0;
+    const maxUnlockedWeek = Math.min(30, Math.max(11, highestCompletedWeek + 10));
+
+    const enrichedProblems = problems.map((p: any) => {
+      const isLocked = p.week_id > maxUnlockedWeek;
+      return {
+        ...p,
+        is_locked: isLocked,
+        lock_reason: isLocked ? `Unlocks when you reach Week ${p.week_id - 10} (Week + 10 Learning Horizon)` : undefined,
+      };
+    });
+
+    return res.json(enrichedProblems);
   } catch (error: any) {
     console.error('getLeetcodeList error:', error);
     return res.status(500).json({ error: 'Failed to fetch LeetCode problems.' });
@@ -179,6 +202,32 @@ export async function toggleLeetcodeStatus(req: AuthRequest, res: Response) {
     const userId = req.user?.id || 1;
     const problemId = parseInt(req.params.id as string, 10);
     const { status, notes } = req.body; // 'COMPLETED' or 'PENDING'
+
+    const problem = await getOne(`SELECT * FROM leetcode_problems WHERE id = $1`, [problemId]);
+    if (!problem) {
+      return res.status(404).json({ error: 'Problem not found' });
+    }
+
+    // Check if problem is locked
+    const completedWeekRows = await getAll(
+      `SELECT w.week_number
+       FROM weeks w
+       JOIN study_days sd ON sd.week_id = w.id
+       LEFT JOIN day_progress dp ON sd.id = dp.day_id AND dp.user_id = $1 AND dp.status = 'COMPLETED'
+       GROUP BY w.id, w.week_number
+       HAVING COUNT(sd.id) = COUNT(dp.id)
+       ORDER BY w.week_number DESC`,
+      [userId]
+    );
+    const highestCompletedWeek = completedWeekRows.length > 0 ? completedWeekRows[0].week_number : 0;
+    const maxUnlockedWeek = Math.min(30, Math.max(11, highestCompletedWeek + 10));
+
+    if (problem.week_id > maxUnlockedWeek) {
+      return res.status(403).json({
+        error: `This problem is locked. Unlocks when you reach Week ${problem.week_id - 10} (Week + 10 Learning Horizon).`,
+        locked: true,
+      });
+    }
 
     const targetStatus = status || 'COMPLETED';
 

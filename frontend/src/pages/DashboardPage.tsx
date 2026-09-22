@@ -307,12 +307,17 @@ export const DashboardPage: React.FC = () => {
 
         {/* Streak */}
         <div className="p-4 rounded-xl bg-[#161c2b] border border-[#232e42] flex flex-col justify-between">
-          <span className="text-[11px] font-mono text-slate-400 uppercase font-semibold">Daily Streak</span>
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-mono text-slate-400 uppercase font-semibold">Daily Streak</span>
+            <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded">1-Day Gate</span>
+          </div>
           <div className="text-2xl font-bold font-mono text-amber-400 mt-1 flex items-center gap-1.5">
             <Flame className="w-5 h-5 fill-amber-400 text-amber-400" />
             {stats.streak.current}d
           </div>
-          <span className="text-[11px] text-slate-500 mt-1">Best: {stats.streak.longest} days</span>
+          <span className="text-[11px] text-slate-400 mt-1 font-mono">
+            Highest: <strong className="text-amber-300 font-semibold">{stats.streak.highest ?? stats.streak.longest}d</strong>
+          </span>
         </div>
 
         {/* Revision */}

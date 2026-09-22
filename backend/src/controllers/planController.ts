@@ -41,8 +41,11 @@ export async function getTracks(req: AuthRequest, res: Response) {
     const userId = req.user?.id || 1;
     const tracks = await getAll(`SELECT * FROM tracks ORDER BY id ASC`);
 
+    let previousTracksCompleted = true;
+    let activeDomainId = tracks.length > 0 ? tracks[0].id : 'dsa';
+
     const enrichedTracks = await Promise.all(
-      tracks.map(async (t) => {
+      tracks.map(async (t, index) => {
         const totalDaysRow = await getOne(`SELECT COUNT(*) as count FROM study_days WHERE track_id = $1`, [t.id]);
         const completedDaysRow = await getOne(
           `SELECT COUNT(DISTINCT dp.day_id) as count
@@ -70,6 +73,20 @@ export async function getTracks(req: AuthRequest, res: Response) {
         const completedWeeks = parseInt(completedWeeksRow?.count || '0', 10);
         const pendingWeeks = totalWeeks - completedWeeks;
 
+        // Domain Lock Rule: Track is unlocked if index === 0 OR previous tracks were 100% completed
+        const isLocked = index > 0 && !previousTracksCompleted;
+        const lockReason = isLocked
+          ? `Complete ${tracks[index - 1].name} (100%) to unlock this domain`
+          : undefined;
+
+        if (pct < 100 && previousTracksCompleted && activeDomainId === tracks[0].id && index > 0) {
+          activeDomainId = t.id;
+        }
+
+        if (pct < 100) {
+          previousTracksCompleted = false;
+        }
+
         return {
           ...t,
           totalDays: total,
@@ -79,6 +96,9 @@ export async function getTracks(req: AuthRequest, res: Response) {
           totalWeeks,
           completedWeeks,
           pendingWeeks,
+          is_locked: isLocked,
+          lock_reason: lockReason,
+          is_active: t.id === activeDomainId,
         };
       })
     );
@@ -111,6 +131,20 @@ export async function getWeeks(req: AuthRequest, res: Response) {
     const user = await getOne(`SELECT start_date FROM users WHERE id = $1`, [userId]);
     const startDate = parseDateOnly(user?.start_date);
 
+    // Compute highest completed week and max unlocked week (Week + 10 Rule)
+    const completedWeekRows = await getAll(
+      `SELECT w.week_number
+       FROM weeks w
+       JOIN study_days sd ON sd.week_id = w.id
+       LEFT JOIN day_progress dp ON sd.id = dp.day_id AND dp.user_id = $1 AND dp.status = 'COMPLETED'
+       GROUP BY w.id, w.week_number
+       HAVING COUNT(sd.id) = COUNT(dp.id)
+       ORDER BY w.week_number DESC`,
+      [userId]
+    );
+    const highestCompletedWeek = completedWeekRows.length > 0 ? completedWeekRows[0].week_number : 0;
+    const maxUnlockedWeek = Math.min(30, Math.max(11, highestCompletedWeek + 10));
+
     const enriched = await Promise.all(
       weeks.map(async (w) => {
         const totalDaysRow = await getOne(`SELECT COUNT(*) as count FROM study_days WHERE week_id = $1`, [w.id]);
@@ -139,6 +173,11 @@ export async function getWeeks(req: AuthRequest, res: Response) {
         const weekStartDate = addDays(startDate, minDay - 1);
         const weekEndDate = addDays(startDate, maxDay - 1);
 
+        const isLocked = w.week_number > maxUnlockedWeek;
+        const lockReason = isLocked
+          ? `Unlocks when you reach Week ${w.week_number - 10} (Week + 10 Learning Horizon)`
+          : undefined;
+
         return {
           ...w,
           totalDays: total,
@@ -148,6 +187,9 @@ export async function getWeeks(req: AuthRequest, res: Response) {
           startDate: toIsoDateStr(weekStartDate),
           endDate: toIsoDateStr(weekEndDate),
           formattedDateRange: `${formatReadableDate(weekStartDate)} – ${formatReadableDate(weekEndDate)}`,
+          is_locked: isLocked,
+          lock_reason: lockReason,
+          max_unlocked_week: maxUnlockedWeek,
         };
       })
     );
@@ -178,6 +220,21 @@ export async function getWeekDetail(req: AuthRequest, res: Response) {
 
     const user = await getOne(`SELECT start_date FROM users WHERE id = $1`, [userId]);
     const startDate = parseDateOnly(user?.start_date);
+
+    // Compute max unlocked week
+    const completedWeekRows = await getAll(
+      `SELECT w.week_number
+       FROM weeks w
+       JOIN study_days sd ON sd.week_id = w.id
+       LEFT JOIN day_progress dp ON sd.id = dp.day_id AND dp.user_id = $1 AND dp.status = 'COMPLETED'
+       GROUP BY w.id, w.week_number
+       HAVING COUNT(sd.id) = COUNT(dp.id)
+       ORDER BY w.week_number DESC`,
+      [userId]
+    );
+    const highestCompletedWeek = completedWeekRows.length > 0 ? completedWeekRows[0].week_number : 0;
+    const maxUnlockedWeek = Math.min(30, Math.max(11, highestCompletedWeek + 10));
+    const isWeekLocked = week.week_number > maxUnlockedWeek;
 
     const days = await getAll(
       `SELECT sd.*, COALESCE(dp.status, 'PENDING') as status, dp.completed_at
@@ -210,6 +267,7 @@ export async function getWeekDetail(req: AuthRequest, res: Response) {
           progress: totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0,
           scheduledDate: toIsoDateStr(dayDate),
           formattedDate: formatReadableDate(dayDate),
+          is_locked: isWeekLocked,
         };
       })
     );
@@ -233,6 +291,9 @@ export async function getWeekDetail(req: AuthRequest, res: Response) {
         startDate: toIsoDateStr(weekStartDate),
         endDate: toIsoDateStr(weekEndDate),
         formattedDateRange: `${formatReadableDate(weekStartDate)} – ${formatReadableDate(weekEndDate)}`,
+        is_locked: isWeekLocked,
+        lock_reason: isWeekLocked ? `Unlocks when you reach Week ${week.week_number - 10}` : undefined,
+        max_unlocked_week: maxUnlockedWeek,
       },
       days: enrichedDays,
     });
@@ -284,12 +345,29 @@ export async function getDays(req: AuthRequest, res: Response) {
     const user = await getOne(`SELECT start_date FROM users WHERE id = $1`, [userId]);
     const startDate = parseDateOnly(user?.start_date);
 
+    // Compute max unlocked week
+    const completedWeekRows = await getAll(
+      `SELECT w.week_number
+       FROM weeks w
+       JOIN study_days sd ON sd.week_id = w.id
+       LEFT JOIN day_progress dp ON sd.id = dp.day_id AND dp.user_id = $1 AND dp.status = 'COMPLETED'
+       GROUP BY w.id, w.week_number
+       HAVING COUNT(sd.id) = COUNT(dp.id)
+       ORDER BY w.week_number DESC`,
+      [userId]
+    );
+    const highestCompletedWeek = completedWeekRows.length > 0 ? completedWeekRows[0].week_number : 0;
+    const maxUnlockedWeek = Math.min(30, Math.max(11, highestCompletedWeek + 10));
+
     const enrichedDays = paginated.map((d: any) => {
       const dayDate = addDays(startDate, d.day_number - 1);
+      const isDayLocked = d.week_number > maxUnlockedWeek;
       return {
         ...d,
         scheduledDate: toIsoDateStr(dayDate),
         formattedDate: formatReadableDate(dayDate),
+        is_locked: isDayLocked,
+        lock_reason: isDayLocked ? `Unlocks when you reach Week ${d.week_number - 10}` : undefined,
       };
     });
 
@@ -326,6 +404,25 @@ export async function getDayDetail(req: AuthRequest, res: Response) {
 
     if (!day) {
       return res.status(404).json({ error: 'Study day not found' });
+    }
+
+    // Compute max unlocked week
+    const completedWeekRows = await getAll(
+      `SELECT w.week_number
+       FROM weeks w
+       JOIN study_days sd ON sd.week_id = w.id
+       LEFT JOIN day_progress dp ON sd.id = dp.day_id AND dp.user_id = $1 AND dp.status = 'COMPLETED'
+       GROUP BY w.id, w.week_number
+       HAVING COUNT(sd.id) = COUNT(dp.id)
+       ORDER BY w.week_number DESC`,
+      [userId]
+    );
+    const highestCompletedWeek = completedWeekRows.length > 0 ? completedWeekRows[0].week_number : 0;
+    const maxUnlockedWeek = Math.min(30, Math.max(11, highestCompletedWeek + 10));
+    const isDayLocked = day.week_number > maxUnlockedWeek;
+    day.is_locked = isDayLocked;
+    if (isDayLocked) {
+      day.lock_reason = `Unlocks when you reach Week ${day.week_number - 10} (Week + 10 Learning Horizon)`;
     }
 
     // Parse JSON fields

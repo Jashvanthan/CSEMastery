@@ -319,6 +319,11 @@ export const LeetcodePage: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-semibold text-slate-100">{p.title}</h3>
+                    {p.is_locked && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center gap-1 font-semibold">
+                        🔒 Locked
+                      </span>
+                    )}
                     <span
                       className={`text-[11px] font-mono font-semibold px-2 py-0.5 rounded ${
                         p.difficulty === 'Easy'
@@ -338,6 +343,12 @@ export const LeetcodePage: React.FC = () => {
                     <span>• Week {p.week_id}</span>
                     {p.time_complexity && <span>• Time: {p.time_complexity}</span>}
                   </div>
+
+                  {p.is_locked && p.lock_reason && (
+                    <p className="mt-2 text-xs font-mono text-amber-300/80 bg-amber-500/5 px-3 py-1.5 rounded-lg border border-amber-500/20">
+                      🔒 {p.lock_reason}
+                    </p>
+                  )}
 
                   {p.user_notes && (
                     <p className="mt-2 text-xs font-mono text-blue-300/80 bg-[#090d16] px-3 py-1.5 rounded-lg border border-[#232e42]">
@@ -373,14 +384,17 @@ export const LeetcodePage: React.FC = () => {
                 {/* Mark Complete / Pending Button */}
                 <button
                   onClick={() => handleToggleStatus(p)}
+                  disabled={p.is_locked}
                   className={`px-4 py-1.5 rounded-lg font-mono text-xs font-semibold flex items-center gap-1.5 transition-all ${
-                    p.status === 'COMPLETED'
+                    p.is_locked
+                      ? 'bg-slate-800 text-slate-500 border border-slate-700 cursor-not-allowed'
+                      : p.status === 'COMPLETED'
                       ? 'bg-emerald-600/20 text-emerald-400 border border-emerald-500/30'
                       : 'bg-blue-600 hover:bg-blue-500 text-white'
                   }`}
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  <span>{p.status === 'COMPLETED' ? 'Completed ✓' : 'Mark Done'}</span>
+                  <span>{p.is_locked ? 'Locked' : p.status === 'COMPLETED' ? 'Completed ✓' : 'Mark Done'}</span>
                 </button>
               </div>
             </div>

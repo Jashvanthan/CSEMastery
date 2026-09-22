@@ -165,7 +165,9 @@ export const PlanPage: React.FC = () => {
                 {/* Week Header Toggle Bar */}
                 <div
                   onClick={() => toggleWeekExpand(week.id)}
-                  className="p-4 sm:p-5 flex items-center justify-between cursor-pointer hover:bg-[#161c2b] transition-colors"
+                  className={`p-4 sm:p-5 flex items-center justify-between cursor-pointer transition-colors ${
+                    week.is_locked ? 'opacity-70 bg-[#0f141f] hover:bg-[#121824]' : 'hover:bg-[#161c2b]'
+                  }`}
                 >
                   <div className="flex items-center gap-3">
                     <button className="p-1 rounded-lg bg-[#090d16] text-slate-400">
@@ -176,6 +178,11 @@ export const PlanPage: React.FC = () => {
                         <span className="font-bold text-blue-400">WEEK {week.week_number}</span>
                         <span className="text-slate-500">•</span>
                         <span className="text-slate-400 uppercase">{week.track_name || week.track_id}</span>
+                        {week.is_locked && (
+                          <span className="text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded font-semibold text-[10px]">
+                            🔒 LOCKED (WEEK + 10)
+                          </span>
+                        )}
                         {week.status === 'COMPLETED' && (
                           <span className="text-emerald-400 bg-emerald-500/10 px-2 py-0.2 rounded font-semibold text-[10px]">
                             COMPLETED
@@ -183,12 +190,9 @@ export const PlanPage: React.FC = () => {
                         )}
                       </div>
                       <h3 className="text-base font-bold text-slate-100">{week.title}</h3>
-                      {week.formattedDateRange && (
-                        <div className="flex items-center gap-1.5 mt-0.5 text-[11px] font-mono text-slate-400">
-                          <span>📅</span>
-                          <span>{week.formattedDateRange}</span>
-                        </div>
-                      )}
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        {week.is_locked && week.lock_reason ? week.lock_reason : week.formattedDateRange}
+                      </p>
                     </div>
                   </div>
 
@@ -203,9 +207,13 @@ export const PlanPage: React.FC = () => {
                     <Link
                       to={`/week/${week.id}`}
                       onClick={(e) => e.stopPropagation()}
-                      className="px-3 py-1.5 rounded-lg bg-[#161c2b] border border-[#232e42] hover:border-blue-500/40 text-xs font-mono text-blue-400 hover:text-blue-300 transition-colors"
+                      className={`px-3 py-1.5 rounded-lg border text-xs font-mono transition-colors ${
+                        week.is_locked
+                          ? 'bg-slate-900 border-slate-800 text-slate-500 hover:text-slate-300'
+                          : 'bg-[#161c2b] border-[#232e42] hover:border-blue-500/40 text-blue-400 hover:text-blue-300'
+                      }`}
                     >
-                      Week Details →
+                      {week.is_locked ? 'Locked Week →' : 'Week Details →'}
                     </Link>
                   </div>
                 </div>
