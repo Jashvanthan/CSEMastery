@@ -26,8 +26,19 @@ async function runTestSuite() {
   // =========================================================================
   console.log('--- TEST 1: DAY & CURRICULUM FETCHING FROM DB ---');
 
+  // Obtain demo token for authorized testing
+  const demoLoginRes = await fetch(`${API_BASE}/auth/demo-login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId: 1 }),
+  }).then((r) => r.json());
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${demoLoginRes.token}`,
+  };
+
   // 1.1 Fetch all 200 Days from DB via API
-  const daysRes = await fetch(`${API_BASE}/days?limit=200`).then((r) => r.json());
+  const daysRes = await fetch(`${API_BASE}/days?limit=200`, { headers: authHeaders }).then((r) => r.json());
   assert(daysRes.days && daysRes.days.length === 200, `API /days returns exact 200 days (Received: ${daysRes.days?.length})`);
 
   // 1.2 Verify Track Day counts
@@ -46,7 +57,7 @@ async function runTestSuite() {
   assert(capstoneDays.length === 6, `Capstone track has 6 days (Received: ${capstoneDays.length})`);
 
   // 1.3 Verify Day 1 Details (Java Foundations)
-  const day1Res = await fetch(`${API_BASE}/days/1`).then((r) => r.json());
+  const day1Res = await fetch(`${API_BASE}/days/1`, { headers: authHeaders }).then((r) => r.json());
   assert(day1Res.day && day1Res.day.day_number === 1, `Day 1 day_number is 1`);
   assert(day1Res.day.track_id === 'java', `Day 1 track is 'java'`);
   assert(day1Res.tasks && day1Res.tasks.length === 5, `Day 1 has 5 dedicated study tasks (Received: ${day1Res.tasks?.length})`);
@@ -54,15 +65,15 @@ async function runTestSuite() {
   assert(day1Res.tasks[0].interview_questions && day1Res.tasks[0].interview_questions.includes('Q:'), `Day 1 Task 1 contains interview Q&A`);
 
   // 1.4 Verify Day 99 Details (DBMS Relational Model)
-  const day99Res = await fetch(`${API_BASE}/days/99`).then((r) => r.json());
+  const day99Res = await fetch(`${API_BASE}/days/99`, { headers: authHeaders }).then((r) => r.json());
   assert(day99Res.day && day99Res.day.day_number === 99, `Day 99 day_number is 99`);
   assert(day99Res.day.track_id === 'dbms', `Day 99 track is 'dbms'`);
   assert(day99Res.tasks && day99Res.tasks.length === 5, `Day 99 has 5 dedicated DBMS tasks`);
   assert(day99Res.tasks[0].code_examples && day99Res.tasks[0].code_examples.includes('EXPLAIN'), `Day 99 Task contains SQL EXPLAIN buffers code`);
 
   // 1.5 Verify Weeks API by track
-  const javaWeeksRes = await fetch(`${API_BASE}/weeks?trackId=java`).then((r) => r.json());
-  const dbmsWeeksRes = await fetch(`${API_BASE}/weeks?trackId=dbms`).then((r) => r.json());
+  const javaWeeksRes = await fetch(`${API_BASE}/weeks?trackId=java`, { headers: authHeaders }).then((r) => r.json());
+  const dbmsWeeksRes = await fetch(`${API_BASE}/weeks?trackId=dbms`, { headers: authHeaders }).then((r) => r.json());
   assert(javaWeeksRes.length === 6, `Java track has 6 weeks (Received: ${javaWeeksRes.length})`);
   assert(dbmsWeeksRes.length === 8, `DBMS track has 8 weeks (Received: ${dbmsWeeksRes.length})`);
 

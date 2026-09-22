@@ -14,9 +14,7 @@ export interface AuthRequest extends Request {
 export function authMiddleware(req: AuthRequest, res: Response, next: NextFunction) {
   const authHeader = req.headers.authorization;
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    // Default fallback to demo user (id: 1) if no token for instant browsing/dev convenience
-    req.user = { id: 1, email: 'student@csemastery.hub', name: 'Mastery Scholar' };
-    return next();
+    return res.status(401).json({ error: 'Unauthorized: Authentication token required.' });
   }
 
   const token = authHeader.split(' ')[1];
@@ -25,9 +23,7 @@ export function authMiddleware(req: AuthRequest, res: Response, next: NextFuncti
     req.user = decoded;
     next();
   } catch (err) {
-    // If token invalid, fall back to guest/demo user
-    req.user = { id: 1, email: 'student@csemastery.hub', name: 'Mastery Scholar' };
-    next();
+    return res.status(401).json({ error: 'Unauthorized: Invalid or expired authentication token.' });
   }
 }
 
