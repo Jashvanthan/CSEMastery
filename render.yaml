@@ -3,6 +3,7 @@ services:
     name: cse-mastery-hub-backend
     env: node
     plan: free
+    rootDir: backend
     buildCommand: npm install && npm run build && npm run seed
     startCommand: npm start
     envVars:
@@ -15,7 +16,7 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGINS
-        value: https://cse-mastery-hub.vercel.app
+        value: *
 
 databases:
   - name: cse-mastery-db
