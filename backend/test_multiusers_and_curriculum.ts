@@ -272,10 +272,11 @@ async function runTestSuite() {
     headers: { Authorization: `Bearer ${tokenAlpha}` },
   }).then((r) => r.json());
 
-  assert(tracksForAlpha.length === 6, `API /tracks returns 6 curriculum domains`);
-  assert(tracksForAlpha[0].is_locked === false, `First track (${tracksForAlpha[0].name}) is unlocked by default`);
-  assert(tracksForAlpha[1].is_locked === true, `Second track (${tracksForAlpha[1].name}) is locked until first track completes`);
-  assert(tracksForAlpha[1].lock_reason && tracksForAlpha[1].lock_reason.includes('Complete'), `Locked track provides clear unlock requirement message`);
+  const trackJava = tracksForAlpha.find((t: any) => t.id === 'java');
+  const trackAI = tracksForAlpha.find((t: any) => t.id === 'ai');
+  assert(trackJava && trackJava.is_locked === false, `Foundational track (${trackJava?.name}) is unlocked by default`);
+  assert(trackAI && trackAI.is_locked === true, `Advanced track (${trackAI?.name}) is locked until prerequisites complete`);
+  assert(trackAI && trackAI.lock_reason && trackAI.lock_reason.includes('Complete'), `Locked track provides clear unlock requirement message`);
 
   // 4.2 Verify Week + 10 Learning Horizon
   const weeksForAlpha = await fetch(`${API_BASE}/weeks`, {

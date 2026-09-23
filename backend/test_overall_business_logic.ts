@@ -135,14 +135,19 @@ async function runOverallBusinessLogicTests() {
     assert(lockedTaskRes.status === 403, 'Security: Direct API attempt to complete task in locked Week 12 returns 403 Forbidden');
   }
 
-  // 3.3 Domain Locking: 1 Domain at a time
+  // 3.3 Domain Locking: Foundational unlocked, Advanced (AI/Capstone) locked
   const tracksRes = await fetch(`${API_BASE}/tracks`, {
     headers: { Authorization: `Bearer ${token1}` },
   }).then((r) => r.json());
 
-  assert(tracksRes[0].is_locked === false, `Initial domain (${tracksRes[0].name}) is unlocked`);
-  assert(tracksRes[1].is_locked === true, `Subsequent domain (${tracksRes[1].name}) is locked until active domain completes`);
-  assert(tracksRes[1].lock_reason && tracksRes[1].lock_reason.includes('Complete'), 'Locked domain provides clear lock reason');
+  const javaDomain = tracksRes.find((t: any) => t.id === 'java');
+  const aiDomain = tracksRes.find((t: any) => t.id === 'ai');
+  const capstoneDomain = tracksRes.find((t: any) => t.id === 'capstone');
+
+  assert(javaDomain && javaDomain.is_locked === false, `Core foundational domain (${javaDomain?.name}) is unlocked`);
+  assert(aiDomain && aiDomain.is_locked === true, `Advanced domain (${aiDomain?.name}) is locked until prerequisites complete`);
+  assert(aiDomain && aiDomain.lock_reason && aiDomain.lock_reason.includes('Complete'), 'Locked domain provides clear prerequisite lock reason');
+  assert(capstoneDomain && capstoneDomain.is_locked === true, `Capstone domain (${capstoneDomain?.name}) is locked`);
 
   // =========================================================================
   // 4. DAY & TASK CASCADE COMPLETION & AUTO-SYNC
@@ -235,7 +240,7 @@ async function runOverallBusinessLogicTests() {
     headers: { Authorization: `Bearer ${token1}` },
   }).then((r) => r.json());
 
-  assert(leaderboardRes.leaderboard && leaderboardRes.leaderboard.length > 0, `Leaderboard populated with scholars`);
+  assert(leaderboardRes.leaderboard && leaderboardRes.leaderboard.length > 0, 'Leaderboard populated with scholars');
   assert(leaderboardRes.topScholar && leaderboardRes.topScholar.rank === 1, 'Top scholar identified at rank #1');
 
   const user1InLeaderboard = leaderboardRes.leaderboard.find((e: any) => e.email === user1Email);
@@ -245,8 +250,128 @@ async function runOverallBusinessLogicTests() {
   assert(user2InLeaderboard && user2InLeaderboard.isCurrentUser === false, 'isCurrentUser is FALSE for other users (User 2)');
   assert(user1InLeaderboard.completedDays === 1, 'User 1 completedDays reflected accurately on live leaderboard');
 
+  // =========================================================================
+  // 8. SPACED REPETITION & REVISION ENGINE
+  // =========================================================================
+  console.log('\n--- 8. SPACED REPETITION & REVISION ENGINE ---');
+
+  // Mark task 101 as MASTERED
+  const revUpdate1 = await fetch(`${API_BASE}/tasks/101/revision`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+    body: JSON.stringify({ revisionStatus: 'MASTERED' }),
+  }).then((r) => r.json());
+  assert(revUpdate1.revisionStatus === 'MASTERED', 'Task 101 revision status updated to MASTERED');
+
+  // Mark task 102 as NEEDS_REVIEW
+  const revUpdate2 = await fetch(`${API_BASE}/tasks/102/revision`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+    body: JSON.stringify({ revisionStatus: 'NEEDS_REVIEW' }),
+  }).then((r) => r.json());
+  assert(revUpdate2.revisionStatus === 'NEEDS_REVIEW', 'Task 102 revision status updated to NEEDS_REVIEW');
+
+  // Fetch revision items
+  const revisionItems = await fetch(`${API_BASE}/revision`, {
+    headers: { Authorization: `Bearer ${token1}` },
+  }).then((r) => r.json());
+  assert(Array.isArray(revisionItems), 'API /revision returns revision items array');
+  const needsReviewItem = revisionItems.find((i: any) => i.id === 102 || i.task_id === 102);
+  assert(!!needsReviewItem, 'Task 102 accurately appears in revision queue as NEEDS_REVIEW');
+
+  // =========================================================================
+  // 9. STRUCTURED STUDY NOTES & DAILY REFLECTIONS
+  // =========================================================================
+  console.log('\n--- 9. STUDY NOTES & DAILY REFLECTIONS ---');
+
+  // User 1 saves a structured note
+  const newNoteRes = await fetch(`${API_BASE}/notes`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+    body: JSON.stringify({
+      day_id: 1,
+      task_id: 101,
+      content: 'Important JVM note on heap & stack layout.',
+    }),
+  }).then((r) => r.json());
+  assert(newNoteRes && newNoteRes.id, 'User 1 created structured study note');
+
+  const noteId = newNoteRes.id;
+
+  // User 1 updates the note
+  const updateNoteRes = await fetch(`${API_BASE}/notes/${noteId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+    body: JSON.stringify({ content: 'Updated JVM note: Mastered ClassLoader and GC Roots.' }),
+  }).then((r) => r.json());
+  assert(updateNoteRes && updateNoteRes.content && updateNoteRes.content.includes('Updated JVM note'), 'Study note edited and updated');
+
+  // User 1 saves daily reflection
+  const reflectionPayload = {
+    whatLearned: 'Deep understanding of JVM bytecodes and memory models',
+    difficult: 'ClassLoader hierarchy and delegation mechanism',
+    toRevise: 'Garbage collection generations',
+    completedPractical: true,
+  };
+  const saveReflectionRes = await fetch(`${API_BASE}/days/1/reflection`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+    body: JSON.stringify({ reflection: reflectionPayload }),
+  }).then((r) => r.json());
+  assert(saveReflectionRes && saveReflectionRes.message && saveReflectionRes.message.includes('successfully'), 'Daily learning reflection saved for Day 1');
+
+  // User 2 cannot see User 1's note (isolation)
+  const user2Notes = await fetch(`${API_BASE}/notes`, {
+    headers: { Authorization: `Bearer ${token2}` },
+  }).then((r) => r.json());
+  const foundUser1NoteInUser2 = user2Notes.find((n: any) => n.id === noteId);
+  assert(!foundUser1NoteInUser2, 'User 2 notes feed is strictly isolated from User 1');
+
+  // =========================================================================
+  // 10. CAPSTONE PROJECTS & REPOSITORY TRACKING
+  // =========================================================================
+  console.log('\n--- 10. CAPSTONE PROJECTS & PORTFOLIO TRACKING ---');
+
+  const projectsList = await fetch(`${API_BASE}/projects`, {
+    headers: { Authorization: `Bearer ${token1}` },
+  }).then((r) => r.json());
+  assert(Array.isArray(projectsList) && projectsList.length > 0, `Projects catalog populated (Count: ${projectsList.length})`);
+
+  const firstProject = projectsList[0];
+  const updateProjectRes = await fetch(`${API_BASE}/projects/${firstProject.id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+    body: JSON.stringify({
+      status: 'IN_PROGRESS',
+      repoUrl: 'https://github.com/scholar/distributed-kv-store',
+      demoUrl: 'https://kvstore.demo.io',
+      notes: 'Implemented Raft consensus algorithm with log replication.',
+    }),
+  }).then((r) => r.json());
+  assert(updateProjectRes && updateProjectRes.status === 'IN_PROGRESS', 'Project progress updated with GitHub repo & demo URL');
+
+  // =========================================================================
+  // 11. USER PROFILE & LEARNING SETTINGS
+  // =========================================================================
+  console.log('\n--- 11. USER PROFILE & SETTINGS ---');
+
+  const meRes = await fetch(`${API_BASE}/auth/me`, {
+    headers: { Authorization: `Bearer ${token1}` },
+  }).then((r) => r.json());
+  assert(meRes.email === user1Email, 'API /auth/me returns authenticated scholar profile');
+  assert(meRes.completed_days === 1, 'Profile summary reports 1 completed day');
+  assert(meRes.completed_tasks === 5, 'Profile summary reports 5 completed tasks');
+
+  // Update profile
+  const updateProfileRes = await fetch(`${API_BASE}/auth/profile`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token1}` },
+    body: JSON.stringify({ name: 'Senior Software Scholar', start_date: '2026-09-01' }),
+  }).then((r) => r.json());
+  assert(updateProfileRes.name === 'Senior Software Scholar', 'User profile name updated');
+
   console.log('\n======================================================================');
-  console.log(`📊 BUSINESS LOGIC TEST SUMMARY: ${passed} PASSED | ${failed} FAILED`);
+  console.log(`📊 COMPREHENSIVE BUSINESS LOGIC TEST SUMMARY: ${passed} PASSED | ${failed} FAILED`);
   console.log('======================================================================\n');
 
   if (failed > 0) {
@@ -258,3 +383,4 @@ runOverallBusinessLogicTests().catch((err) => {
   console.error('Fatal Test Suite Error:', err);
   process.exit(1);
 });
+
