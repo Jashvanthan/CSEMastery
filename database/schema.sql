@@ -168,12 +168,18 @@ CREATE TABLE IF NOT EXISTS project_progress (
 );
 
 -- Indexes for maximum query performance
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 CREATE INDEX IF NOT EXISTS idx_study_days_day_num ON study_days(day_number);
 CREATE INDEX IF NOT EXISTS idx_study_days_week_id ON study_days(week_id);
 CREATE INDEX IF NOT EXISTS idx_study_days_track_id ON study_days(track_id);
 CREATE INDEX IF NOT EXISTS idx_study_tasks_day_id ON study_tasks(day_id);
 CREATE INDEX IF NOT EXISTS idx_study_progress_user_task ON study_progress(user_id, task_id);
-CREATE INDEX IF NOT EXISTS idx_study_progress_status ON study_progress(status);
+CREATE INDEX IF NOT EXISTS idx_study_progress_user_status ON study_progress(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_study_progress_user_revision ON study_progress(user_id, revision_status);
 CREATE INDEX IF NOT EXISTS idx_day_progress_user_day ON day_progress(user_id, day_id);
+CREATE INDEX IF NOT EXISTS idx_day_progress_user_status ON day_progress(user_id, status);
 CREATE INDEX IF NOT EXISTS idx_leetcode_num ON leetcode_problems(leetcode_number);
 CREATE INDEX IF NOT EXISTS idx_leetcode_progress_user ON leetcode_progress(user_id, problem_id);
+CREATE INDEX IF NOT EXISTS idx_leetcode_progress_user_status ON leetcode_progress(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_study_notes_user ON study_notes(user_id);
+

@@ -28,6 +28,8 @@ if (dbUrl) {
   initSqlite();
 }
 
+const stmtCache = new Map<string, any>();
+
 function initSqlite() {
   isSqlite = true;
   const dbDir = path.resolve(__dirname, '../../../database');
@@ -37,8 +39,21 @@ function initSqlite() {
   const dbPath = path.join(dbDir, 'mastery_hub.sqlite');
   sqliteDb = new Database(dbPath);
   sqliteDb.pragma('journal_mode = WAL');
+  sqliteDb.pragma('synchronous = NORMAL');
+  sqliteDb.pragma('cache_size = -64000');
+  sqliteDb.pragma('temp_store = MEMORY');
   sqliteDb.pragma('foreign_keys = ON');
   console.log(`[DB] Using SQLite local database at: ${dbPath}`);
+}
+
+function getPreparedStatement(sqliteSql: string) {
+  if (!sqliteDb) throw new Error('[DB] SQLite DB not initialized');
+  let stmt = stmtCache.get(sqliteSql);
+  if (!stmt) {
+    stmt = sqliteDb.prepare(sqliteSql);
+    stmtCache.set(sqliteSql, stmt);
+  }
+  return stmt;
 }
 
 export async function query(sql: string, params: any[] = []): Promise<any> {
@@ -62,12 +77,11 @@ export async function query(sql: string, params: any[] = []): Promise<any> {
 
     try {
       const trimmed = sqliteSql.trim().toUpperCase();
+      const stmt = getPreparedStatement(sqliteSql);
       if (trimmed.startsWith('SELECT') || trimmed.startsWith('WITH') || trimmed.startsWith('PRAGMA')) {
-        const stmt = sqliteDb.prepare(sqliteSql);
         const rows = stmt.all(...expandedParams);
         return { rows, rowCount: rows.length };
       } else {
-        const stmt = sqliteDb.prepare(sqliteSql);
         const info = stmt.run(...expandedParams);
         return {
           rows: info.lastInsertRowid ? [{ id: info.lastInsertRowid }] : [],

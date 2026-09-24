@@ -5,12 +5,15 @@ import { generateToken, AuthRequest } from '../middleware/auth';
 
 export async function register(req: Request, res: Response) {
   try {
-    const { email, password, name, startDate, targetTrack } = req.body;
+    const { email, password, name, startDate } = req.body;
     if (!email || !password || !name) {
       return res.status(400).json({ error: 'Email, password, and name are required.' });
     }
 
-    const existing = await getOne(`SELECT id FROM users WHERE email = $1`, [email.toLowerCase().trim()]);
+    const cleanEmail = String(email).toLowerCase().trim();
+    const cleanName = String(name).trim();
+
+    const existing = await getOne(`SELECT id FROM users WHERE email = $1`, [cleanEmail]);
     if (existing) {
       return res.status(400).json({ error: 'User with this email already exists.' });
     }
@@ -18,16 +21,17 @@ export async function register(req: Request, res: Response) {
     const passwordHash = await bcrypt.hash(password, 10);
     const chosenStartDate = startDate || new Date().toISOString().split('T')[0];
 
-    await query(
+    const insertRes = await query(
       `INSERT INTO users (email, password_hash, name, start_date)
        VALUES ($1, $2, $3, $4)`,
-      [email.toLowerCase().trim(), passwordHash, name.trim(), chosenStartDate]
+      [cleanEmail, passwordHash, cleanName, chosenStartDate]
     );
 
     const userRecord = await getOne(
       `SELECT id, email, name, start_date, created_at FROM users WHERE email = $1`,
-      [email.toLowerCase().trim()]
+      [cleanEmail]
     );
+
     const token = generateToken({ id: userRecord.id, email: userRecord.email, name: userRecord.name });
 
     return res.status(201).json({
@@ -48,7 +52,8 @@ export async function login(req: Request, res: Response) {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
 
-    const user = await getOne(`SELECT * FROM users WHERE email = $1`, [email.toLowerCase().trim()]);
+    const cleanEmail = String(email).toLowerCase().trim();
+    const user = await getOne(`SELECT * FROM users WHERE email = $1`, [cleanEmail]);
     if (!user) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
@@ -79,32 +84,39 @@ export async function login(req: Request, res: Response) {
 export async function getMe(req: AuthRequest, res: Response) {
   try {
     const userId = req.user?.id || 1;
-    const user = await getOne(`SELECT id, email, name, start_date, created_at FROM users WHERE id = $1`, [userId]);
-    if (!user) {
+
+    // Fetch user details along with progress counts in a single consolidated query
+    const userWithStats = await getOne(
+      `SELECT 
+         u.id, 
+         u.email, 
+         u.name, 
+         u.start_date, 
+         u.created_at,
+         (SELECT COUNT(DISTINCT day_id) FROM day_progress WHERE user_id = u.id AND status = 'COMPLETED') as completed_days,
+         (SELECT COUNT(DISTINCT task_id) FROM study_progress WHERE user_id = u.id AND status = 'COMPLETED') as completed_tasks,
+         (SELECT COUNT(DISTINCT problem_id) FROM leetcode_progress WHERE user_id = u.id AND status = 'COMPLETED') as solved_leetcode
+       FROM users u 
+       WHERE u.id = $1`,
+      [userId]
+    );
+
+    if (!userWithStats) {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    // Enrich with quick progress stats
-    const completedDaysRow = await getOne(
-      `SELECT COUNT(DISTINCT day_id) as count FROM day_progress WHERE user_id = $1 AND status = 'COMPLETED'`,
-      [userId]
-    );
-    const completedTasksRow = await getOne(
-      `SELECT COUNT(DISTINCT task_id) as count FROM study_progress WHERE user_id = $1 AND status = 'COMPLETED'`,
-      [userId]
-    );
-    const solvedLeetCodeRow = await getOne(
-      `SELECT COUNT(DISTINCT problem_id) as count FROM leetcode_progress WHERE user_id = $1 AND status = 'COMPLETED'`,
-      [userId]
-    );
-
     return res.json({
-      ...user,
-      completed_days: parseInt(completedDaysRow?.count || '0', 10),
-      completed_tasks: parseInt(completedTasksRow?.count || '0', 10),
-      solved_leetcode: parseInt(solvedLeetCodeRow?.count || '0', 10),
+      id: userWithStats.id,
+      email: userWithStats.email,
+      name: userWithStats.name,
+      start_date: userWithStats.start_date,
+      created_at: userWithStats.created_at,
+      completed_days: Number(userWithStats.completed_days || 0),
+      completed_tasks: Number(userWithStats.completed_tasks || 0),
+      solved_leetcode: Number(userWithStats.solved_leetcode || 0),
     });
   } catch (error: any) {
+    console.error('getMe error:', error);
     return res.status(500).json({ error: 'Failed to fetch user profile.' });
   }
 }
@@ -133,27 +145,26 @@ export async function updateProfile(req: AuthRequest, res: Response) {
 // Get the single public default demo scholar
 export async function getDemoUsers(req: Request, res: Response) {
   try {
-    // Only return the single official default demo account (id: 1 or student@csemastery.hub)
+    // Single consolidated query fetching user + aggregated metrics
     const user = await getOne(
-      `SELECT id, email, name, start_date, created_at FROM users WHERE id = 1 OR email = 'student@csemastery.hub' ORDER BY id ASC LIMIT 1`
+      `SELECT 
+         u.id, 
+         u.name, 
+         u.email, 
+         u.start_date, 
+         u.created_at,
+         (SELECT COUNT(DISTINCT day_id) FROM day_progress WHERE user_id = u.id AND status = 'COMPLETED') as completed_days,
+         (SELECT COUNT(DISTINCT task_id) FROM study_progress WHERE user_id = u.id AND status = 'COMPLETED') as completed_tasks,
+         (SELECT COUNT(DISTINCT problem_id) FROM leetcode_progress WHERE user_id = u.id AND status = 'COMPLETED') as solved_leetcode
+       FROM users u 
+       WHERE u.id = 1 OR u.email = 'student@csemastery.hub' 
+       ORDER BY u.id ASC 
+       LIMIT 1`
     );
 
     if (!user) {
       return res.json([]);
     }
-
-    const completedDays = await getOne(
-      `SELECT COUNT(DISTINCT day_id) as count FROM day_progress WHERE user_id = $1 AND status = 'COMPLETED'`,
-      [user.id]
-    );
-    const completedTasks = await getOne(
-      `SELECT COUNT(DISTINCT task_id) as count FROM study_progress WHERE user_id = $1 AND status = 'COMPLETED'`,
-      [user.id]
-    );
-    const solvedLeetCode = await getOne(
-      `SELECT COUNT(DISTINCT problem_id) as count FROM leetcode_progress WHERE user_id = $1 AND status = 'COMPLETED'`,
-      [user.id]
-    );
 
     return res.json([
       {
@@ -161,9 +172,9 @@ export async function getDemoUsers(req: Request, res: Response) {
         name: user.name,
         email: user.email,
         start_date: user.start_date,
-        completedDays: parseInt(completedDays?.count || '0', 10),
-        completedTasks: parseInt(completedTasks?.count || '0', 10),
-        solvedLeetCode: parseInt(solvedLeetCode?.count || '0', 10),
+        completedDays: Number(user.completed_days || 0),
+        completedTasks: Number(user.completed_tasks || 0),
+        solvedLeetCode: Number(user.solved_leetcode || 0),
       },
     ]);
   } catch (error: any) {
@@ -204,4 +215,5 @@ export async function demoLogin(req: Request, res: Response) {
     return res.status(500).json({ error: 'Failed to perform demo login.' });
   }
 }
+
 
